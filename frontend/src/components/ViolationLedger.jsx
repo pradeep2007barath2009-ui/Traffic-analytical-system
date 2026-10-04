@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
-import { ShieldAlert, AlertTriangle, FileText, CheckCircle2, Search, Filter, Download, ArrowUpRight } from 'lucide-react';
+import { ShieldAlert, AlertTriangle, FileText, CheckCircle2, Search, Filter, Download, ArrowUpRight, Footprints } from 'lucide-react';
 
 export default function ViolationLedger({ violations = [] }) {
   const [filter, setFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredViolations = violations.filter((v) => {
-    const matchesFilter = filter === 'ALL' || v.type.toLowerCase().includes(filter.toLowerCase());
+    let matchesFilter = true;
+    if (filter === 'Pedestrian Yield') {
+      matchesFilter = v.type.toLowerCase().includes('pedestrian') || v.type.toLowerCase().includes('yield');
+    } else if (filter !== 'ALL') {
+      matchesFilter = v.type.toLowerCase().includes(filter.toLowerCase());
+    }
+
     const query = searchTerm.toLowerCase();
     const matchesSearch = !searchTerm ||
       (v.id && v.id.toLowerCase().includes(query)) ||
@@ -35,7 +41,7 @@ export default function ViolationLedger({ violations = [] }) {
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-mono">
-                Computer vision speed telemetry and red-light infraction capture
+                Computer vision speed telemetry, red-light intrusion, and pedestrian crosswalk safety
               </p>
             </div>
           </div>
@@ -56,7 +62,7 @@ export default function ViolationLedger({ violations = [] }) {
 
             {/* Filter Pills */}
             <div className="flex items-center p-1 bg-slate-950/80 rounded-xl border border-white/5 text-xs font-mono">
-              {['ALL', 'Overspeeding', 'Red Light'].map((t) => (
+              {['ALL', 'Overspeeding', 'Red Light', 'Pedestrian Yield'].map((t) => (
                 <button
                   key={t}
                   onClick={() => setFilter(t)}
@@ -113,20 +119,26 @@ export default function ViolationLedger({ violations = [] }) {
                     <td className="py-3">
                       <span
                         className={`px-2 py-0.5 rounded-md text-[10px] font-bold border inline-flex items-center gap-1 ${
-                          item.type.includes('Red Light')
+                          item.type.includes('Pedestrian')
+                            ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-sm shadow-amber-500/15'
+                            : item.type.includes('Red Light')
                             ? 'bg-rose-500/15 border-rose-500/40 text-rose-300 shadow-sm shadow-rose-500/10'
                             : 'bg-amber-500/15 border-amber-500/40 text-amber-300 shadow-sm shadow-amber-500/10'
                         }`}
                       >
-                        <AlertTriangle className="w-2.5 h-2.5" />
+                        {item.type.includes('Pedestrian') ? (
+                          <Footprints className="w-3 h-3 text-amber-300" />
+                        ) : (
+                          <AlertTriangle className="w-3 h-3" />
+                        )}
                         {item.type}
                       </span>
                     </td>
-                    <td className="py-3 font-extrabold text-white tabular-nums">{item.speed}</td>
+                    <td className="py-3 font-semibold text-slate-300">{item.speed}</td>
                     <td className="py-3 text-right">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold tracking-wider hover:bg-cyan-500/20 transition">
-                        <span>E-CHALLAN</span>
-                        <ArrowUpRight className="w-3 h-3" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        <CheckCircle2 className="w-3 h-3" />
+                        CITATION ISSUED
                       </span>
                     </td>
                   </tr>

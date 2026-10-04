@@ -11,7 +11,9 @@ import {
   Activity,
   Layers,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Footprints,
+  UserCheck
 } from 'lucide-react';
 
 const DEFAULT_CAMERAS = [
@@ -118,6 +120,7 @@ export default function SimulationControls({
   currentDensity = 'MEDIUM',
   onUpdateSettings,
   onTriggerPreemption,
+  onTriggerPedestrian,
   selectedCamId = 'CAM-01',
   onSelectCam,
   junctions = {},
@@ -125,36 +128,24 @@ export default function SimulationControls({
   syncWithCctv = true,
   onToggleSync
 }) {
-  const [scope, setScope] = useState('camera'); // 'camera' or 'all'
+  const [scope, setScope] = useState('camera');
   const [direction, setDirection] = useState('NS');
   const [loadingPreempt, setLoadingPreempt] = useState(false);
+  const [loadingPedestrian, setLoadingPedestrian] = useState(false);
 
   const activeCamId = selectedCamId || 'CAM-01';
 
-  // Get active camera details
-  const activeCameraMeta = (cameras && cameras.length > 0 ? cameras : DEFAULT_CAMERAS).find(
-    (c) => c.id === activeCamId
-  ) || DEFAULT_CAMERAS[0];
-
   const defaultMeta = DEFAULT_CAMERAS.find((c) => c.id === activeCamId) || DEFAULT_CAMERAS[0];
   const approaches = defaultMeta.approaches || {
-    N: 'North Approach',
-    S: 'South Approach',
-    E: 'East Approach',
-    W: 'West Approach'
+    N: 'North Inflow',
+    S: 'South Inflow',
+    E: 'East Inflow',
+    W: 'West Inflow'
   };
 
-  // Junction state for active camera
-  const jState = junctions[activeCamId];
-  const activeMode = scope === 'all'
-    ? currentMode
-    : (jState?.signals?.mode || currentMode);
-
-  const activeDensityVal = scope === 'all'
-    ? currentDensity
-    : (jState?.metrics?.traffic_density || currentDensity);
-
-  const activeQueues = jState?.signals?.queues || { north_south: 0, east_west: 0 };
+  const currentJunction = junctions[activeCamId];
+  const junctionMode = (scope === 'camera' && currentJunction?.signals?.mode) ? currentJunction.signals.mode : currentMode;
+  const junctionDensity = (scope === 'camera' && currentJunction?.metrics?.traffic_density) ? currentJunction.metrics.traffic_density : currentDensity;
 
   const handleModeChange = (newMode) => {
     if (onUpdateSettings) {
@@ -182,6 +173,17 @@ export default function SimulationControls({
       }
     } finally {
       setTimeout(() => setLoadingPreempt(false), 800);
+    }
+  };
+
+  const handlePedestrian = async () => {
+    setLoadingPedestrian(true);
+    try {
+      if (onTriggerPedestrian) {
+        await onTriggerPedestrian(direction === 'NS' ? 'N' : 'E', scope === 'all' ? null : activeCamId);
+      }
+    } finally {
+      setTimeout(() => setLoadingPedestrian(false), 800);
     }
   };
 
@@ -245,128 +247,94 @@ export default function SimulationControls({
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  All Cams
+                  Global (8)
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Camera Selector Strip & Active Metadata */}
-          <div className="space-y-2">
-            {scope === 'camera' ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-400 flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-cyan-400" />
-                    Target Location:
-                  </span>
-                  <span className="text-[11px] text-cyan-400">
-                    {activeCameraMeta.area || defaultMeta.area}
-                  </span>
-                </div>
-
-                {/* Camera Pills */}
-                <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1">
-                  {DEFAULT_CAMERAS.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => onSelectCam && onSelectCam(c.id)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-mono whitespace-nowrap border transition ${
-                        activeCamId === c.id
-                          ? 'bg-cyan-500 text-slate-950 font-bold border-cyan-400 shadow-md shadow-cyan-500/20'
-                          : 'bg-slate-950/60 text-slate-400 border-white/5 hover:border-white/20 hover:text-white'
-                      }`}
-                    >
-                      {c.id}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Active Location Info Pill */}
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/80 border border-white/5 text-xs font-mono">
-                  <div className="truncate">
-                    <strong className="text-cyan-400">{activeCamId}:</strong>{' '}
-                    <span className="text-white font-medium">{activeCameraMeta.label || defaultMeta.label}</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 shrink-0 text-[11px] text-slate-400">
-                    <span>Queues: <strong className="text-cyan-300">NS {activeQueues.north_south} | EW {activeQueues.east_west}</strong></span>
-                    <span className="px-2 py-0.5 rounded bg-slate-800/80 text-slate-200 border border-white/5">
-                      {defaultMeta.limit} km/h
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-500/30 text-xs font-mono text-purple-200 flex items-center justify-between">
-                <span className="flex items-center gap-2 font-medium">
-                  <Layers className="w-4 h-4 text-purple-400" />
-                  Global Fleet Override: Commands apply to all 8 municipal intersections
-                </span>
-                <span className="px-2 py-0.5 rounded bg-purple-900/60 text-purple-200 text-[10px] font-bold border border-purple-500/30">
-                  8 CAMERAS
-                </span>
-              </div>
-            )}
+          {/* Active Target Banner */}
+          <div className="flex items-center justify-between text-xs font-mono px-3 py-1.5 rounded-lg bg-slate-950/60 border border-white/5">
+            <span className="text-slate-400 flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Target: <strong className="text-white">{scope === 'all' ? 'All 8 Municipal Intersections' : `${activeCamId} (${defaultMeta.label})`}</strong></span>
+            </span>
+            <span className="text-[11px] text-cyan-400 font-bold">
+              {scope === 'all' ? '8 JUNCTIONS LINKED' : `${defaultMeta.area}`}
+            </span>
           </div>
 
-          {/* Controller Mode Toggle */}
-          <div>
-            <label className="text-xs font-mono text-slate-400 flex items-center justify-between mb-2">
-              <span>Optimization Algorithm {scope === 'camera' ? `(${activeCamId})` : '(Fleet)'}</span>
-              <span className="text-[11px] text-cyan-400">
-                {activeMode === 'ADAPTIVE' ? 'Deep Q-Network + Webster Delay Optimization' : 'Static Fixed 30s Baseline'}
+          {/* Mode Switcher */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-mono text-slate-300 font-medium flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Optimization Mode:</span>
+              </span>
+              <span className="text-[11px] text-cyan-400 font-mono">
+                {junctionMode === 'ADAPTIVE' ? 'DQN & Webster AI Loop' : 'Fixed 30s Cycles'}
               </span>
             </label>
-            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950/80 rounded-xl border border-white/5">
+            <div className="grid grid-cols-2 gap-2 font-mono">
               <button
                 type="button"
                 onClick={() => handleModeChange('ADAPTIVE')}
-                className={`py-2 px-3 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-2 transition ${
-                  activeMode === 'ADAPTIVE'
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                className={`p-2.5 rounded-xl border text-left transition ${
+                  junctionMode === 'ADAPTIVE'
+                    ? 'bg-cyan-500/15 border-cyan-500/60 shadow-md shadow-cyan-500/10 text-white'
+                    : 'bg-slate-950/60 border-white/5 text-slate-400 hover:text-white hover:border-white/20'
                 }`}
               >
-                <Cpu className="w-4 h-4" />
-                <span>Adaptive Neural Loop</span>
+                <div className="text-xs font-bold text-cyan-300 flex items-center justify-between">
+                  <span>ADAPTIVE</span>
+                  {junctionMode === 'ADAPTIVE' && <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-1">Real-time dynamic splits based on queue weights</div>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleModeChange('FIXED')}
-                className={`py-2 px-3 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-2 transition ${
-                  activeMode === 'FIXED'
-                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md shadow-amber-500/20'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                className={`p-2.5 rounded-xl border text-left transition ${
+                  junctionMode === 'FIXED'
+                    ? 'bg-amber-500/15 border-amber-500/60 shadow-md shadow-amber-500/10 text-white'
+                    : 'bg-slate-950/60 border-white/5 text-slate-400 hover:text-white hover:border-white/20'
                 }`}
               >
-                <Gauge className="w-4 h-4" />
-                <span>Fixed 30s Baseline</span>
+                <div className="text-xs font-bold text-amber-300 flex items-center justify-between">
+                  <span>FIXED (BASELINE)</span>
+                  {junctionMode === 'FIXED' && <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-1">Fixed 30s cycles for benchmarking comparison</div>
               </button>
             </div>
           </div>
 
           {/* Traffic Density Selector */}
-          <div>
-            <label className="text-xs font-mono text-slate-400 flex items-center justify-between mb-2">
-              <span>Simulated Inflow Demand {scope === 'camera' ? `(${activeCamId})` : '(Fleet)'}</span>
-              <span className="text-[11px] text-purple-400 font-bold">{activeDensityVal}</span>
+          <div className="space-y-1.5">
+            <label className="text-xs font-mono text-slate-300 font-medium flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Gauge className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Simulated Inflow Demand:</span>
+              </span>
+              <span className="text-[11px] text-emerald-400 font-mono">
+                {junctionDensity.replace('_', ' ')}
+              </span>
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2 font-mono">
               {[
-                { id: 'LOW', label: 'Low Flow', desc: 'Off-Peak Off-Hours' },
-                { id: 'MEDIUM', label: 'Balanced Flow', desc: 'Standard Day Traffic' },
-                { id: 'RUSH_HOUR', label: 'Peak Inflow', desc: 'Heavy Saturation' }
+                { id: 'LOW', label: 'OFF-PEAK', desc: '12 vpm' },
+                { id: 'MEDIUM', label: 'NOMINAL', desc: '28 vpm' },
+                { id: 'RUSH_HOUR', label: 'RUSH HOUR', desc: '54 vpm' }
               ].map((d) => (
                 <button
                   key={d.id}
                   type="button"
                   onClick={() => handleDensityChange(d.id)}
-                  className={`p-2.5 rounded-xl text-left border transition font-mono ${
-                    activeDensityVal === d.id
-                      ? 'bg-purple-500/20 border-purple-500/60 text-white shadow-md shadow-purple-500/10'
-                      : 'bg-slate-950/60 border-white/5 text-slate-400 hover:border-white/20 hover:text-slate-200'
+                  className={`p-2 rounded-xl border text-center transition ${
+                    junctionDensity === d.id
+                      ? 'bg-emerald-500/15 border-emerald-500/60 text-emerald-300 shadow-md shadow-emerald-500/10'
+                      : 'bg-slate-950/60 border-white/5 text-slate-400 hover:text-white hover:border-white/20'
                   }`}
                 >
                   <div className="text-xs font-bold">{d.label}</div>
@@ -377,39 +345,27 @@ export default function SimulationControls({
           </div>
         </div>
 
-        {/* Emergency Green Corridor Trigger Section */}
-        <div className="p-4 rounded-xl bg-slate-950/90 border border-rose-500/30 space-y-3 shadow-inner">
-          <div className="flex flex-wrap items-center justify-between gap-1.5">
-            <span className="text-xs font-mono font-bold text-rose-400 flex items-center gap-2 uppercase tracking-wider">
-              <Siren className="w-4 h-4 text-rose-400 animate-pulse" />
-              Green Corridor Emergency Preemption
-            </span>
-            <span className="text-[10px] font-mono text-cyan-400 px-2 py-0.5 rounded bg-slate-900 border border-white/5">
-              {scope === 'all' ? 'TARGET: ALL INTERSECTIONS' : `TARGET: ${activeCamId}`}
-            </span>
-          </div>
-
-          {/* Route Selector with Camera Approach Street Names */}
+        {/* Priority Scenario Actions: Emergency & Pedestrian Crosswalk */}
+        <div className="space-y-3">
+          {/* Corridor Selection Axis */}
           <div className="space-y-1.5 text-xs font-mono">
-            <div className="text-[11px] text-slate-400">Select Rapid Dispatch Corridor:</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="text-[11px] text-slate-400">Select Corridor Axis for Preemption & Walk Request:</div>
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setDirection('NS')}
                 className={`p-2.5 rounded-lg border text-left transition ${
                   direction === 'NS'
-                    ? 'bg-rose-500/20 border-rose-500/60 text-white shadow-sm'
+                    ? 'bg-cyan-500/20 border-cyan-500/60 text-white shadow-sm'
                     : 'bg-slate-900/60 border-white/5 text-slate-400 hover:text-white hover:border-white/10'
                 }`}
               >
-                <div className="font-bold text-rose-300 flex items-center justify-between">
+                <div className="font-bold text-cyan-300 flex items-center justify-between">
                   <span>North-South Axis</span>
-                  {direction === 'NS' && <CheckCircle2 className="w-3.5 h-3.5 text-rose-400" />}
+                  {direction === 'NS' && <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />}
                 </div>
-                <div className="text-[10px] text-slate-400 mt-1 truncate flex items-center gap-1">
-                  <span>{approaches.N}</span>
-                  <ArrowRight className="w-3 h-3 text-slate-500 shrink-0" />
-                  <span>{approaches.S}</span>
+                <div className="text-[10px] text-slate-400 mt-1 truncate">
+                  {approaches.N} to {approaches.S}
                 </div>
               </button>
 
@@ -418,36 +374,49 @@ export default function SimulationControls({
                 onClick={() => setDirection('EW')}
                 className={`p-2.5 rounded-lg border text-left transition ${
                   direction === 'EW'
-                    ? 'bg-rose-500/20 border-rose-500/60 text-white shadow-sm'
+                    ? 'bg-cyan-500/20 border-cyan-500/60 text-white shadow-sm'
                     : 'bg-slate-900/60 border-white/5 text-slate-400 hover:text-white hover:border-white/10'
                 }`}
               >
-                <div className="font-bold text-rose-300 flex items-center justify-between">
+                <div className="font-bold text-cyan-300 flex items-center justify-between">
                   <span>East-West Axis</span>
-                  {direction === 'EW' && <CheckCircle2 className="w-3.5 h-3.5 text-rose-400" />}
+                  {direction === 'EW' && <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />}
                 </div>
-                <div className="text-[10px] text-slate-400 mt-1 truncate flex items-center gap-1">
-                  <span>{approaches.E}</span>
-                  <ArrowRight className="w-3 h-3 text-slate-500 shrink-0" />
-                  <span>{approaches.W}</span>
+                <div className="text-[10px] text-slate-400 mt-1 truncate">
+                  {approaches.E} to {approaches.W}
                 </div>
               </button>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handlePreempt}
-            disabled={loadingPreempt}
-            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-500 hover:to-red-500 active:scale-[0.99] text-white font-mono font-bold text-xs uppercase tracking-wider shadow-lg shadow-rose-600/30 border border-rose-400/40 flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer"
-          >
-            <Siren className="w-4 h-4 text-white animate-bounce" />
-            <span>
-              {loadingPreempt
-                ? 'Engaging Route Preemption Protocol...'
-                : `Dispatch Emergency Corridor on ${scope === 'all' ? 'All Intersections' : activeCamId}`}
-            </span>
-          </button>
+          {/* Action Trigger Buttons Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* 1. Emergency Preemption Button */}
+            <button
+              type="button"
+              onClick={handlePreempt}
+              disabled={loadingPreempt}
+              className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 active:scale-[0.99] text-white font-mono font-bold text-xs uppercase tracking-wider shadow-lg shadow-rose-600/30 border border-rose-400/40 flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer"
+            >
+              <Siren className="w-4 h-4 text-white animate-bounce shrink-0" />
+              <span className="truncate">
+                {loadingPreempt ? 'Engaging Corridor...' : 'Ambulance Preempt (A)'}
+              </span>
+            </button>
+
+            {/* 2. Pedestrian Crosswalk Request Button */}
+            <button
+              type="button"
+              onClick={handlePedestrian}
+              disabled={loadingPedestrian}
+              className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 active:scale-[0.99] text-white font-mono font-bold text-xs uppercase tracking-wider shadow-lg shadow-cyan-600/30 border border-cyan-400/40 flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer"
+            >
+              <UserCheck className="w-4 h-4 text-white animate-pulse shrink-0" />
+              <span className="truncate">
+                {loadingPedestrian ? 'Actuating Crosswalk...' : 'Pedestrian Request (P)'}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 """
 UrbanFlow AI - FastAPI Server & Multi-Camera Telemetry Hub
-Coordinates Computer Vision pipelines across city areas, Adaptive Signals, and Web Dashboard.
+Coordinates Computer Vision pipelines across city areas, Adaptive Signals, Pedestrian Safety, and Web Dashboard.
 """
 
 import asyncio
@@ -17,7 +17,6 @@ from backend.engine.simulator import MultiJunctionNetwork, JUNCTION_CONFIGS
 
 app = FastAPI(title="UrbanFlow AI - Multi-Camera Traffic Operations API", version="1.0.0")
 
-# Enable CORS for local React/Vite development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,24 +25,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Multi-Junction Simulator Engine
 sim_engine = MultiJunctionNetwork()
 
 class SettingsPayload(BaseModel):
-    mode: Optional[str] = None # 'ADAPTIVE' or 'FIXED'
-    density: Optional[str] = None # 'LOW', 'MEDIUM', 'RUSH_HOUR'
-    cam: Optional[str] = None # e.g. 'CAM-01' or None for all
+    mode: Optional[str] = None
+    density: Optional[str] = None
+    cam: Optional[str] = None
     show_boxes: Optional[bool] = None
     show_speeds: Optional[bool] = None
     show_trajectories: Optional[bool] = None
     show_lanes: Optional[bool] = None
 
 class PreemptPayload(BaseModel):
-    direction: str = "NS" # 'NS' or 'EW'
+    direction: str = "NS"
     reason: str = "Ambulance Priority Dispatch"
     cam: Optional[str] = None
 
-# Connected WebSocket clients
+class PedestrianPayload(BaseModel):
+    approach: str = "N"
+    cam: Optional[str] = None
+
 connected_clients: List[WebSocket] = []
 
 @app.on_event("startup")
@@ -51,33 +52,29 @@ async def startup_event():
     asyncio.create_task(telemetry_broadcaster())
 
 async def telemetry_broadcaster():
-    """Ticks simulator, synchronizes all cameras with signal states, and broadcasts live telemetry"""
     while True:
         try:
-            # Advance simulation by one step
             sim_state = sim_engine.tick()
 
-            # Synchronize vision cameras with signal state
             ns_light = sim_state["signals"]["ns_light"]
             camera_manager.set_red_light_all(ns_light == "RED")
 
-            # Collect active camera metrics
             cameras_list = camera_manager.list_cameras()
             all_violations = camera_manager.get_all_violations()
 
-            # Build comprehensive telemetry payload
             payload = {
                 "timestamp": time.time(),
                 "signals": sim_state["signals"],
                 "metrics": sim_state["metrics"],
                 "vehicles": sim_state["vehicles"],
+                "pedestrians": sim_state.get("pedestrians", []),
+                "crosswalk_active": sim_state.get("crosswalk_active", False),
                 "junctions": sim_state.get("junctions", {}),
                 "cameras": cameras_list,
                 "violations_count": len(all_violations),
                 "latest_violation": all_violations[0] if all_violations else None
             }
 
-            # Broadcast to all active WebSocket clients
             disconnected = []
             for client in connected_clients:
                 try:
@@ -92,9 +89,7 @@ async def telemetry_broadcaster():
         except Exception:
             pass
 
-        await asyncio.sleep(0.2) # 5 Hz update rate
-
-# --- REST ENDPOINTS ---
+        await asyncio.sleep(0.2)
 
 @app.get("/api/health")
 def health_check():
@@ -102,7 +97,6 @@ def health_check():
 
 @app.get("/api/cameras")
 def get_cameras():
-    """Returns all registered CCTV cameras grouped by city area"""
     return {
         "cameras": camera_manager.list_cameras(),
         "areas": ["North Expressway", "Downtown Commercial", "Tech Park Corridor", "Hospital Green Route"]
@@ -117,6 +111,8 @@ def get_metrics():
         "signals": sim_state["signals"],
         "junctions": sim_state.get("junctions", {}),
         "cameras": camera_manager.list_cameras(),
+        "pedestrians": sim_state.get("pedestrians", []),
+        "crosswalk_active": sim_state.get("crosswalk_active", False),
         "active_violations": len(all_violations)
     }
 
@@ -136,6 +132,17 @@ def trigger_preemption(payload: PreemptPayload):
         "message": f"Emergency green corridor engaged for {payload.direction} route."
     }
 
+@app.post("/api/pedestrian/crossing")
+def trigger_pedestrian_crossing(payload: PedestrianPayload):
+    sim_engine.trigger_pedestrian_crossing(approach=payload.approach, cam_id=payload.cam)
+    camera_manager.trigger_pedestrian_all()
+    return {
+        "status": "CROSSWALK_ACTUATED",
+        "approach": payload.approach,
+        "cam": payload.cam or "ALL",
+        "message": f"Pedestrian crossing active on approach {payload.approach}."
+    }
+
 @app.post("/api/settings")
 def update_settings(settings: SettingsPayload):
     if settings.mode:
@@ -143,7 +150,6 @@ def update_settings(settings: SettingsPayload):
     if settings.density:
         sim_engine.set_density(settings.density, cam_id=settings.cam)
 
-    # Apply overlay settings
     target_cams = [camera_manager.get_camera(settings.cam)] if settings.cam else list(camera_manager.cameras.values())
     for cam in target_cams:
         if settings.show_boxes is not None:
@@ -163,7 +169,6 @@ def update_settings(settings: SettingsPayload):
 
 @app.get("/api/analytics/historical")
 def get_historical_analytics():
-    """Provides dataset for analytics and comparative charts"""
     return {
         "hourly_volume": [
             {"hour": "06:00", "baseline_fixed": 420, "adaptive_ai": 540, "congestion": 35},
@@ -183,11 +188,12 @@ def get_historical_analytics():
             {"hour": "20:00", "baseline_fixed": 690, "adaptive_ai": 890, "congestion": 38}
         ],
         "vehicle_breakdown": [
-            {"name": "Passenger Cars", "value": 64, "color": "#3B82F6"},
+            {"name": "Passenger Cars", "value": 60, "color": "#3B82F6"},
             {"name": "Motorcycles / Scooters", "value": 18, "color": "#10B981"},
-            {"name": "Buses / Transit", "value": 9, "color": "#F59E0B"},
-            {"name": "Commercial Trucks", "value": 6, "color": "#8B5CF6"},
-            {"name": "Emergency Units", "value": 3, "color": "#EF4444"}
+            {"name": "Pedestrians (Crosswalk)", "value": 10, "color": "#06B6D4"},
+            {"name": "Buses / Transit", "value": 6, "color": "#F59E0B"},
+            {"name": "Commercial Trucks", "value": 4, "color": "#8B5CF6"},
+            {"name": "Emergency Units", "value": 2, "color": "#EF4444"}
         ],
         "wait_time_comparison": [
             {"approach": "North (Highway)", "fixed_wait_sec": 24.2, "adaptive_wait_sec": 14.1, "reduction_pct": 41.7},
@@ -199,14 +205,11 @@ def get_historical_analytics():
 
 @app.get("/api/video/feed")
 def video_feed(cam: str = Query("CAM-01")):
-    """Streams live MJPEG stream generated by Computer Vision engine for selected camera"""
     engine = camera_manager.get_camera(cam)
     return StreamingResponse(
         engine.generate_jpeg_stream(),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
-
-# --- WEBSOCKET ENDPOINT ---
 
 @app.websocket("/ws/telemetry")
 async def websocket_telemetry(websocket: WebSocket):
@@ -214,12 +217,14 @@ async def websocket_telemetry(websocket: WebSocket):
     connected_clients.append(websocket)
     try:
         while True:
-            # Keep connection alive & handle incoming commands if any
             data = await websocket.receive_text()
             cmd = json.loads(data)
             if cmd.get("action") == "preempt":
                 sim_engine.inject_emergency_vehicle(approach=cmd.get("direction", "N"))
                 camera_manager.trigger_emergency_all()
+            elif cmd.get("action") == "pedestrian":
+                sim_engine.trigger_pedestrian_crossing(approach=cmd.get("approach", "N"))
+                camera_manager.trigger_pedestrian_all()
     except WebSocketDisconnect:
         if websocket in connected_clients:
             connected_clients.remove(websocket)

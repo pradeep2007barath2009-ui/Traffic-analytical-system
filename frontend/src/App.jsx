@@ -12,7 +12,7 @@ import PresentationSlides from './components/PresentationSlides';
 import ShortcutsModal from './components/ShortcutsModal';
 import GuidedTourModal from './components/GuidedTourModal';
 import AuthPortal from './components/auth/AuthPortal';
-import { LayoutGrid, Video, Compass, Car, ShieldAlert, BarChart3, Presentation, Radio } from 'lucide-react';
+import { LayoutGrid, Video, Compass, Car, ShieldAlert, BarChart3, Presentation, Radio, Footprints } from 'lucide-react';
 
 const CAMERAS_META = [
   { id: 'CAM-01', label: 'Highway 101 Inflow', area: 'North Expressway', limit: 70, status: 'ONLINE', resolution: '1920x1080' },
@@ -34,6 +34,10 @@ const INITIAL_VEHICLES = [
   { id: 106, approach: 'E', type: 'car', dist: 50, speed: 42, stopped: false, is_emergency: false },
   { id: 107, approach: 'W', type: 'car', dist: 125, speed: 46, stopped: false, is_emergency: false },
   { id: 108, approach: 'W', type: 'motorcycle', dist: 70, speed: 50, stopped: false, is_emergency: false }
+];
+
+const INITIAL_PEDESTRIANS = [
+  { id: 501, approach: 'N', progress: 0.35 }
 ];
 
 export default function App() {
@@ -84,6 +88,8 @@ export default function App() {
       }
     },
     vehicles: INITIAL_VEHICLES,
+    pedestrians: INITIAL_PEDESTRIANS,
+    crosswalk_active: true,
     cameras: CAMERAS_META,
     junctions: {}
   });
@@ -103,8 +109,19 @@ export default function App() {
       status: 'CITATION ISSUED'
     },
     {
+      id: 'INF-8920',
+      timestamp: new Date(Date.now() - 95000).toLocaleTimeString(),
+      camera_id: 'CAM-03',
+      area: 'Downtown Commercial',
+      vehicle_type: 'Passenger Car',
+      vehicle_id: '106',
+      type: 'Failure to Yield to Pedestrian',
+      speed: '32 km/h',
+      status: 'CITATION ISSUED'
+    },
+    {
       id: 'INF-8919',
-      timestamp: new Date(Date.now() - 120000).toLocaleTimeString(),
+      timestamp: new Date(Date.now() - 150000).toLocaleTimeString(),
       camera_id: 'CAM-03',
       area: 'Downtown Commercial',
       vehicle_type: 'Commercial Truck',
@@ -127,7 +144,6 @@ export default function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
 
   const wsRef = useRef(null);
-  const lastAnnouncedCorridorRef = useRef(false);
 
   // Web Speech API Voice Announcer
   const speakAlert = useCallback((text) => {
@@ -176,7 +192,6 @@ export default function App() {
         let ew = sig.ew_light;
 
         if (sig.green_corridor?.active) {
-          // Locked in green corridor
           if (sig.green_corridor.direction === 'NS') {
             ns = 'GREEN';
             ew = 'RED';
@@ -210,16 +225,34 @@ export default function App() {
           }
         }
 
-        // Move Vehicles along approaches
+        // Update Pedestrians along crosswalks
+        let currentPedestrians = (prev.pedestrians || []).map((p) => {
+          const nextProg = p.progress + 0.012;
+          return { ...p, progress: nextProg };
+        }).filter((p) => p.progress < 1.05);
+
+        // Automatically spawn occasional crossing pedestrians if none active
+        if (currentPedestrians.length === 0 && Math.random() < 0.03) {
+          currentPedestrians = [{
+            id: 500 + Math.floor(Math.random() * 50),
+            approach: Math.random() > 0.5 ? 'N' : 'S',
+            progress: 0.05
+          }];
+        }
+
+        const isCrosswalkActive = currentPedestrians.length > 0;
+
+        // Move Vehicles along approaches with crosswalk yield logic
         const updatedVehicles = prev.vehicles.map((v) => {
           const isNS = v.approach === 'N' || v.approach === 'S';
-          const canGo = (isNS && ns === 'GREEN') || (!isNS && ew === 'GREEN') || v.is_emergency;
+          const signalCanGo = (isNS && ns === 'GREEN') || (!isNS && ew === 'GREEN');
+          const pedInApproach = currentPedestrians.some((p) => p.approach === v.approach && p.progress > 0.1 && p.progress < 0.9);
           
           let stopped = false;
           let speed = v.speed;
 
-          // Stop Line check at ~18m
-          if (!canGo && v.dist <= 48 && v.dist >= 12 && !v.is_emergency) {
+          // Stop Line check (must yield to pedestrians in crosswalk or stop on red)
+          if ((!signalCanGo || pedInApproach) && v.dist <= 48 && v.dist >= 12 && !v.is_emergency) {
             stopped = true;
             speed = 0;
           } else {
@@ -227,17 +260,12 @@ export default function App() {
             speed = v.type === 'ambulance' ? 68 : v.type === 'truck' ? 36 : 46;
           }
 
-          // Advance distance (dist decreases towards 0)
           let dist = v.dist - (speed / 3.6) * 0.1 * 1.6;
 
           // Respawn after crossing
           if (dist < -50) {
             if (v.is_emergency) {
-              // Ambulance cleared intersection
-              sig.green_corridor = {
-                ...sig.green_corridor,
-                active: false
-              };
+              sig.green_corridor = { ...sig.green_corridor, active: false };
               return null;
             }
             dist = 145 + Math.random() * 25;
@@ -265,6 +293,8 @@ export default function App() {
               queues
             },
             vehicles: updatedVehicles,
+            pedestrians: currentPedestrians,
+            crosswalk_active: isCrosswalkActive,
             metrics: prev.metrics
           };
         });
@@ -280,6 +310,8 @@ export default function App() {
             queues
           },
           vehicles: updatedVehicles,
+          pedestrians: currentPedestrians,
+          crosswalk_active: isCrosswalkActive,
           junctions: activeJunctions,
           metrics: {
             ...prev.metrics,
@@ -358,7 +390,6 @@ export default function App() {
       // Local client fallback
     }
 
-    // Inject emergency vehicle locally
     setTelemetry((prev) => {
       const ambulance = {
         id: Date.now(),
@@ -390,6 +421,33 @@ export default function App() {
     });
 
     speakAlert(`Priority Alert! Emergency green corridor engaged on ${direction === 'NS' ? 'North South' : 'East West'} route.`);
+  };
+
+  // Trigger Pedestrian Crosswalk Clearance
+  const handleTriggerPedestrian = async (approach = 'N', cam = null) => {
+    try {
+      await fetch('/api/pedestrian/crossing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approach, cam })
+      });
+    } catch {
+      // Local client fallback
+    }
+
+    const newPed = {
+      id: Math.floor(Math.random() * 800) + 100,
+      approach: approach || 'N',
+      progress: 0.05
+    };
+
+    setTelemetry((prev) => ({
+      ...prev,
+      crosswalk_active: true,
+      pedestrians: [newPed, ...(prev.pedestrians || [])]
+    }));
+
+    speakAlert(`Pedestrian crosswalk active on ${approach === 'N' ? 'North' : approach === 'S' ? 'South' : approach === 'E' ? 'East' : 'West'} crosswalk. Signals holding traffic for safety.`);
   };
 
   // Export Infraction Ledger to CSV
@@ -436,6 +494,9 @@ export default function App() {
       } else if (e.key === 'a' || e.key === 'A' || e.code === 'Space') {
         e.preventDefault();
         handleTriggerPreemption('NS');
+      } else if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        handleTriggerPedestrian('N');
       } else if (e.key === 'm' || e.key === 'M') {
         e.preventDefault();
         const nextMode = telemetry.signals.mode === 'ADAPTIVE' ? 'FIXED' : 'ADAPTIVE';
@@ -486,6 +547,8 @@ export default function App() {
               signals: data.signals || prev.signals,
               metrics: data.metrics || prev.metrics,
               vehicles: data.vehicles || prev.vehicles,
+              pedestrians: data.pedestrians || prev.pedestrians,
+              crosswalk_active: data.crosswalk_active !== undefined ? data.crosswalk_active : prev.crosswalk_active,
               cameras: data.cameras || prev.cameras,
               junctions: data.junctions || prev.junctions
             }));
@@ -627,6 +690,9 @@ export default function App() {
                 <IntersectionVisualizer
                   signals={telemetry.signals}
                   vehicles={telemetry.vehicles}
+                  pedestrians={telemetry.pedestrians}
+                  onTriggerPedestrian={handleTriggerPedestrian}
+                  crosswalkActive={telemetry.crosswalk_active}
                   greenCorridor={telemetry.signals?.green_corridor}
                   colorblindMode={colorblindMode}
                   reducedMotion={reducedMotion}
@@ -654,6 +720,7 @@ export default function App() {
                   currentDensity={telemetry.metrics?.traffic_density}
                   onUpdateSettings={handleUpdateSettings}
                   onTriggerPreemption={handleTriggerPreemption}
+                  onTriggerPedestrian={handleTriggerPedestrian}
                   selectedCamId={selectedCamId}
                   onSelectCam={setSelectedCamId}
                   junctions={telemetry.junctions}
@@ -697,15 +764,15 @@ export default function App() {
                     </div>
                     <div className="flex justify-between py-1.5 border-b border-white/5 text-slate-300">
                       <span className="text-slate-400">Inference Pipeline:</span>
-                      <span className="text-emerald-400 font-bold">YOLOv8 + ByteTrack</span>
+                      <span className="text-emerald-400 font-bold">YOLOv8 + Crosswalk ROI</span>
                     </div>
                     <div className="flex justify-between py-1.5 border-b border-white/5 text-slate-300">
                       <span className="text-slate-400">Speed Calibration:</span>
                       <span className="text-slate-200">2.8 px/frame = 1 km/h</span>
                     </div>
                     <div className="flex justify-between py-1.5 text-slate-300">
-                      <span className="text-slate-400">Stop-Line Reference:</span>
-                      <span className="text-amber-400 font-bold">Y = 255 px Coordinate</span>
+                      <span className="text-slate-400">Pedestrian Crosswalk:</span>
+                      <span className="text-cyan-400 font-bold">Zebra Zone Active</span>
                     </div>
                   </div>
                 </div>
@@ -722,6 +789,9 @@ export default function App() {
               <IntersectionVisualizer
                 signals={telemetry.signals}
                 vehicles={telemetry.vehicles}
+                pedestrians={telemetry.pedestrians}
+                onTriggerPedestrian={handleTriggerPedestrian}
+                crosswalkActive={telemetry.crosswalk_active}
                 greenCorridor={telemetry.signals?.green_corridor}
                 colorblindMode={colorblindMode}
                 reducedMotion={reducedMotion}
@@ -739,6 +809,7 @@ export default function App() {
                 currentDensity={telemetry.metrics?.traffic_density}
                 onUpdateSettings={handleUpdateSettings}
                 onTriggerPreemption={handleTriggerPreemption}
+                onTriggerPedestrian={handleTriggerPedestrian}
                 selectedCamId={selectedCamId}
                 onSelectCam={setSelectedCamId}
                 junctions={telemetry.junctions}

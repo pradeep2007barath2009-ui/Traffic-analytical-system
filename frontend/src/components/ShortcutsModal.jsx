@@ -6,6 +6,7 @@ export default function ShortcutsModal({ isOpen, onClose }) {
 
   const shortcuts = [
     { key: 'A or Space', desc: 'Inject Ambulance & Trigger Green Corridor Preemption', tag: 'Emergency' },
+    { key: 'P', desc: 'Trigger Pedestrian Crosswalk Crossing & Safety Clearance', tag: 'Pedestrian' },
     { key: 'M', desc: 'Toggle Signal Controller (Adaptive AI vs. Fixed 30s)', tag: 'Algorithm' },
     { key: '1', desc: 'Set Traffic Demand to Low Flow (Off-Peak)', tag: 'Simulation' },
     { key: '2', desc: 'Set Traffic Demand to Normal Flow', tag: 'Simulation' },
