@@ -2,6 +2,8 @@
 
 A production-grade, end-to-end intelligent urban traffic management and analytical platform combining **Computer Vision**, **Adaptive Traffic Signal Control with Emergency Green Corridor Preemption**, and a **Real-Time Traffic Operations Center (TOC) Dashboard**.
 
+🌐 **Live Vercel Deployment**: [https://frontend-lilac-alpha-77.vercel.app](https://frontend-lilac-alpha-77.vercel.app)
+
 ---
 
 ## 🌟 Key Highlights & Features
