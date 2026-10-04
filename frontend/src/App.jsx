@@ -242,17 +242,27 @@ export default function App() {
 
         const isCrosswalkActive = currentPedestrians.length > 0;
 
+        // Force signal to RED for pedestrian safety holding
+        const pedOnNS = currentPedestrians.some((p) => p.approach === 'N' || p.approach === 'S');
+        const pedOnEW = currentPedestrians.some((p) => p.approach === 'E' || p.approach === 'W');
+        if (pedOnNS && !sig.green_corridor?.active) {
+          ns = 'RED';
+        }
+        if (pedOnEW && !sig.green_corridor?.active) {
+          ew = 'RED';
+        }
+
         // Move Vehicles along approaches with crosswalk yield logic
         const updatedVehicles = prev.vehicles.map((v) => {
           const isNS = v.approach === 'N' || v.approach === 'S';
           const signalCanGo = (isNS && ns === 'GREEN') || (!isNS && ew === 'GREEN');
-          const pedInApproach = currentPedestrians.some((p) => p.approach === v.approach && p.progress > 0.1 && p.progress < 0.9);
+          const pedInApproach = currentPedestrians.some((p) => p.approach === v.approach);
           
           let stopped = false;
           let speed = v.speed;
 
-          // Stop Line check (must yield to pedestrians in crosswalk or stop on red)
-          if ((!signalCanGo || pedInApproach) && v.dist <= 48 && v.dist >= 12 && !v.is_emergency) {
+          // Vehicles MUST STOP if red light OR pedestrian is crossing this approach
+          if ((!signalCanGo || pedInApproach) && v.dist <= 75 && v.dist >= 12 && !v.is_emergency) {
             stopped = true;
             speed = 0;
           } else {
@@ -260,7 +270,7 @@ export default function App() {
             speed = v.type === 'ambulance' ? 68 : v.type === 'truck' ? 36 : 46;
           }
 
-          let dist = v.dist - (speed / 3.6) * 0.1 * 1.6;
+          let dist = stopped ? Math.max(14, v.dist) : v.dist - (speed / 3.6) * 0.1 * 1.6;
 
           // Respawn after crossing
           if (dist < -50) {
@@ -441,8 +451,15 @@ export default function App() {
       progress: 0.05
     };
 
+    const isNS = (approach || 'N') === 'N' || (approach || 'N') === 'S';
+
     setTelemetry((prev) => ({
       ...prev,
+      signals: {
+        ...prev.signals,
+        ns_light: isNS ? 'RED' : prev.signals.ns_light,
+        ew_light: !isNS ? 'RED' : prev.signals.ew_light
+      },
       crosswalk_active: true,
       pedestrians: [newPed, ...(prev.pedestrians || [])]
     }));

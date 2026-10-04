@@ -100,12 +100,10 @@ class TrackedVehicle:
         must_stop = (red_light_active or pedestrian_in_crosswalk) and not self.is_emergency
 
         if must_stop:
-            if 0 < distance_to_stop < 95:
-                self.vy = max(0.0, self.vy - 0.45)
-                if self.vy < 0.2:
-                    self.vy = 0.0
-                    self.stopped = True
-                    self.stop_time += 0.03
+            if 0 < distance_to_stop < 110:
+                self.vy = 0.0
+                self.stopped = True
+                self.stop_time += 0.03
             else:
                 self.stopped = False
         else:

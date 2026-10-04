@@ -173,14 +173,13 @@ class SimVehicle:
                 should_stop = True
 
         if should_stop:
-            self.speed = max(0.0, self.speed - 30.0 * dt)
-            if self.speed < 1.0:
-                self.speed = 0.0
-                self.stopped = True
-                self.waiting_time += dt
+            self.speed = 0.0
+            self.stopped = True
+            self.waiting_time += dt
+            return
         else:
             self.stopped = False
-            self.speed = min(self.target_speed, self.speed + 20.0 * dt)
+            self.speed = min(self.target_speed, self.speed + 25.0 * dt)
 
         speed_mps = self.speed * (1000.0 / 3600.0)
         self.dist -= speed_mps * dt
@@ -292,8 +291,16 @@ class IntersectionSimulator:
             if ev.dist <= 0:
                 self.signal_controller.clear_emergency_preemption()
 
-        ns_can_go = (signal_state["ns_light"] == "GREEN")
-        ew_can_go = (signal_state["ew_light"] == "GREEN")
+        # Check active pedestrians and enforce pedestrian safety hold on signals
+        ped_active_ns = any(p.approach in ['N', 'S'] for p in self.pedestrians)
+        ped_active_ew = any(p.approach in ['E', 'W'] for p in self.pedestrians)
+        if ped_active_ns and not signal_state.get("green_corridor", {}).get("active"):
+            signal_state["ns_light"] = "RED"
+        if ped_active_ew and not signal_state.get("green_corridor", {}).get("active"):
+            signal_state["ew_light"] = "RED"
+
+        ns_can_go = (signal_state["ns_light"] == "GREEN") and not ped_active_ns
+        ew_can_go = (signal_state["ew_light"] == "GREEN") and not ped_active_ew
 
         # Update vehicle movements with pedestrian crosswalk yield checking
         for approach in ['N', 'S', 'E', 'W']:
