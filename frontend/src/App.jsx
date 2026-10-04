@@ -12,17 +12,39 @@ import PresentationSlides from './components/PresentationSlides';
 import ShortcutsModal from './components/ShortcutsModal';
 import GuidedTourModal from './components/GuidedTourModal';
 import AuthPortal from './components/auth/AuthPortal';
-import { LayoutGrid, Video, Compass, Car, ShieldAlert, BarChart3, Presentation, Radio, Cpu, Layers } from 'lucide-react';
+import { LayoutGrid, Video, Compass, Car, ShieldAlert, BarChart3, Presentation, Radio } from 'lucide-react';
+
+const CAMERAS_META = [
+  { id: 'CAM-01', label: 'Highway 101 Inflow', area: 'North Expressway', limit: 70, status: 'ONLINE', resolution: '1920x1080' },
+  { id: 'CAM-02', label: 'Express Toll Plaza', area: 'North Expressway', limit: 60, status: 'ONLINE', resolution: '1920x1080' },
+  { id: 'CAM-03', label: 'Central 4-Way Junction', area: 'Downtown Commercial', limit: 50, status: 'ONLINE', resolution: '1920x1080' },
+  { id: 'CAM-04', label: 'Main Ave Transit Hub', area: 'Downtown Commercial', limit: 40, status: 'ONLINE', resolution: '1920x1080' },
+  { id: 'CAM-05', label: 'East Boulevard Inflow', area: 'Tech Park Corridor', limit: 60, status: 'ONLINE', resolution: '1920x1080' },
+  { id: 'CAM-06', label: 'West Metro Interchange', area: 'Tech Park Corridor', limit: 45, status: 'ONLINE', resolution: '1920x1080' },
+  { id: 'CAM-07', label: 'Trauma Center Emergency Gate', area: 'Hospital Green Route', limit: 50, status: 'ONLINE', resolution: '1920x1080' },
+  { id: 'CAM-08', label: 'Green Route Clearance Sensor', area: 'Hospital Green Route', limit: 50, status: 'ONLINE', resolution: '1920x1080' }
+];
+
+const INITIAL_VEHICLES = [
+  { id: 101, approach: 'N', type: 'car', dist: 130, speed: 48, stopped: false, is_emergency: false },
+  { id: 102, approach: 'N', type: 'truck', dist: 85, speed: 38, stopped: false, is_emergency: false },
+  { id: 103, approach: 'S', type: 'car', dist: 110, speed: 52, stopped: false, is_emergency: false },
+  { id: 104, approach: 'S', type: 'motorcycle', dist: 40, speed: 45, stopped: false, is_emergency: false },
+  { id: 105, approach: 'E', type: 'bus', dist: 95, speed: 34, stopped: false, is_emergency: false },
+  { id: 106, approach: 'E', type: 'car', dist: 50, speed: 42, stopped: false, is_emergency: false },
+  { id: 107, approach: 'W', type: 'car', dist: 125, speed: 46, stopped: false, is_emergency: false },
+  { id: 108, approach: 'W', type: 'motorcycle', dist: 70, speed: 50, stopped: false, is_emergency: false }
+];
 
 export default function App() {
   const [isConnected, setIsConnected] = useState(false);
-  const [activeSection, setActiveSection] = useState('unified'); // 'unified', 'vision', 'adaptive', 'fleet', 'violations', 'analytics', 'slides'
-  const [theme, setTheme] = useState('theme-cyber'); // 'theme-cyber', 'theme-arctic', 'theme-emerald', 'theme-amber', 'theme-monolith'
+  const [activeSection, setActiveSection] = useState('unified');
+  const [theme, setTheme] = useState('theme-cyber');
   
-  // Accessibility & Inclusivity Preferences
+  // Accessibility Preferences
   const [colorblindMode, setColorblindMode] = useState(false);
   const [voiceAnnounce, setVoiceAnnounce] = useState(false);
-  const [fontSize, setFontSize] = useState('normal'); // 'normal', 'large', 'xl'
+  const [fontSize, setFontSize] = useState('normal');
   const [reducedMotion, setReducedMotion] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
@@ -34,34 +56,64 @@ export default function App() {
       ns_light: 'GREEN',
       ew_light: 'RED',
       phase_duration: 25.0,
-      time_remaining_sec: 18.5,
+      time_remaining_sec: 18.0,
       green_corridor: {
         active: false,
         direction: null,
         reason: '',
-        cleared_count: 0,
-        time_saved_sec: 0
+        cleared_count: 3,
+        time_saved_sec: 42
       },
       queues: { north_south: 4, east_west: 3 }
     },
     metrics: {
-      active_vehicles: 12,
-      total_cleared: 68,
-      avg_speed_kmh: 38.4,
-      avg_wait_sec: 9.2,
-      congestion_index: 34,
+      active_vehicles: 8,
+      total_cleared: 142,
+      avg_speed_kmh: 41.8,
+      avg_wait_sec: 9.4,
+      congestion_index: 32,
       wait_reduction_pct: 38.6,
-      co2_saved_kg: 1.42,
-      traffic_density: 'MEDIUM'
+      co2_saved_kg: 3.42,
+      traffic_density: 'MEDIUM',
+      by_type: {
+        car: { count: 4, avg_speed: 44.5 },
+        motorcycle: { count: 2, avg_speed: 48.0 },
+        bus: { count: 1, avg_speed: 34.0 },
+        truck: { count: 1, avg_speed: 36.2 },
+        ambulance: { count: 0, avg_speed: 0 }
+      }
     },
-    vehicles: [],
-    cameras: [],
+    vehicles: INITIAL_VEHICLES,
+    cameras: CAMERAS_META,
     junctions: {}
   });
 
   const [selectedCamId, setSelectedCamId] = useState('CAM-01');
   const [syncWithCctv, setSyncWithCctv] = useState(true);
-  const [violations, setViolations] = useState([]);
+  const [violations, setViolations] = useState([
+    {
+      id: 'INF-8921',
+      timestamp: new Date(Date.now() - 45000).toLocaleTimeString(),
+      camera_id: 'CAM-01',
+      area: 'North Expressway',
+      vehicle_type: 'Passenger Car',
+      vehicle_id: '108',
+      type: 'Overspeeding (74 km/h)',
+      speed: '74 km/h',
+      status: 'CITATION ISSUED'
+    },
+    {
+      id: 'INF-8919',
+      timestamp: new Date(Date.now() - 120000).toLocaleTimeString(),
+      camera_id: 'CAM-03',
+      area: 'Downtown Commercial',
+      vehicle_type: 'Commercial Truck',
+      vehicle_id: '102',
+      type: 'Red Light Intrusion',
+      speed: '38 km/h',
+      status: 'CITATION ISSUED'
+    }
+  ]);
   
   // Authentication State
   const [currentUser, setCurrentUser] = useState(() => {
@@ -109,24 +161,137 @@ export default function App() {
     }
   };
 
-  // Load violations
-  const loadViolations = async () => {
-    try {
-      const res = await fetch('/api/violations');
-      if (res.ok) {
-        const data = await res.json();
-        setViolations(data.violations || []);
-      }
-    } catch (err) {
-      console.error('Failed to load violations:', err);
-    }
-  };
-
+  // --- AUTONOMOUS EDGE SIMULATION LOOP (When backend WebSocket is disconnected) ---
   useEffect(() => {
-    loadViolations();
-    const vioInterval = setInterval(loadViolations, 3000);
-    return () => clearInterval(vioInterval);
-  }, []);
+    if (isConnected) return; // Backend is active; skip client simulation
+
+    const simInterval = setInterval(() => {
+      setTelemetry((prev) => {
+        const sig = { ...prev.signals };
+        let remaining = Math.max(0, sig.time_remaining_sec - 0.1);
+
+        // Phase Transitions
+        let phase = sig.current_phase;
+        let ns = sig.ns_light;
+        let ew = sig.ew_light;
+
+        if (sig.green_corridor?.active) {
+          // Locked in green corridor
+          if (sig.green_corridor.direction === 'NS') {
+            ns = 'GREEN';
+            ew = 'RED';
+            phase = 'NS_EMERGENCY';
+          } else {
+            ns = 'RED';
+            ew = 'GREEN';
+            phase = 'EW_EMERGENCY';
+          }
+        } else if (remaining <= 0) {
+          if (phase === 'NS_GREEN') {
+            phase = 'NS_YELLOW';
+            ns = 'YELLOW';
+            ew = 'RED';
+            remaining = 3.0;
+          } else if (phase === 'NS_YELLOW') {
+            phase = 'EW_GREEN';
+            ns = 'RED';
+            ew = 'GREEN';
+            remaining = 18.0;
+          } else if (phase === 'EW_GREEN') {
+            phase = 'EW_YELLOW';
+            ns = 'RED';
+            ew = 'YELLOW';
+            remaining = 3.0;
+          } else {
+            phase = 'NS_GREEN';
+            ns = 'GREEN';
+            ew = 'RED';
+            remaining = 20.0;
+          }
+        }
+
+        // Move Vehicles along approaches
+        const updatedVehicles = prev.vehicles.map((v) => {
+          const isNS = v.approach === 'N' || v.approach === 'S';
+          const canGo = (isNS && ns === 'GREEN') || (!isNS && ew === 'GREEN') || v.is_emergency;
+          
+          let stopped = false;
+          let speed = v.speed;
+
+          // Stop Line check at ~18m
+          if (!canGo && v.dist <= 48 && v.dist >= 12 && !v.is_emergency) {
+            stopped = true;
+            speed = 0;
+          } else {
+            stopped = false;
+            speed = v.type === 'ambulance' ? 68 : v.type === 'truck' ? 36 : 46;
+          }
+
+          // Advance distance (dist decreases towards 0)
+          let dist = v.dist - (speed / 3.6) * 0.1 * 1.6;
+
+          // Respawn after crossing
+          if (dist < -50) {
+            if (v.is_emergency) {
+              // Ambulance cleared intersection
+              sig.green_corridor = {
+                ...sig.green_corridor,
+                active: false
+              };
+              return null;
+            }
+            dist = 145 + Math.random() * 25;
+            speed = 40 + Math.random() * 15;
+          }
+
+          return { ...v, dist, speed, stopped };
+        }).filter(Boolean);
+
+        // Queues calculation
+        const queues = {
+          north_south: updatedVehicles.filter((v) => (v.approach === 'N' || v.approach === 'S') && v.stopped).length,
+          east_west: updatedVehicles.filter((v) => (v.approach === 'E' || v.approach === 'W') && v.stopped).length
+        };
+
+        const activeJunctions = { ...prev.junctions };
+        CAMERAS_META.forEach((cam) => {
+          activeJunctions[cam.id] = {
+            signals: {
+              ...sig,
+              current_phase: phase,
+              ns_light: ns,
+              ew_light: ew,
+              time_remaining_sec: Math.round(remaining * 10) / 10,
+              queues
+            },
+            vehicles: updatedVehicles,
+            metrics: prev.metrics
+          };
+        });
+
+        return {
+          ...prev,
+          signals: {
+            ...sig,
+            current_phase: phase,
+            ns_light: ns,
+            ew_light: ew,
+            time_remaining_sec: Math.round(remaining * 10) / 10,
+            queues
+          },
+          vehicles: updatedVehicles,
+          junctions: activeJunctions,
+          metrics: {
+            ...prev.metrics,
+            active_vehicles: updatedVehicles.length,
+            congestion_index: Math.min(80, Math.round(queues.north_south * 8 + queues.east_west * 8 + 18))
+          }
+        };
+      });
+    }, 100);
+
+    return () => clearInterval(simInterval);
+  }, [isConnected]);
 
   // Update Settings API
   const handleUpdateSettings = async (settings) => {
@@ -136,43 +301,44 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
       });
-      setTelemetry((prev) => {
-        const nextJunctions = { ...prev.junctions };
-        if (settings.cam && nextJunctions[settings.cam]) {
-          nextJunctions[settings.cam] = {
-            ...nextJunctions[settings.cam],
-            signals: {
-              ...nextJunctions[settings.cam].signals,
-              mode: settings.mode || nextJunctions[settings.cam].signals?.mode
-            },
-            metrics: {
-              ...nextJunctions[settings.cam].metrics,
-              traffic_density: settings.density || nextJunctions[settings.cam].metrics?.traffic_density
-            }
-          };
-        }
-        return {
-          ...prev,
+    } catch {
+      // Local fallback
+    }
+
+    setTelemetry((prev) => {
+      const nextJunctions = { ...prev.junctions };
+      if (settings.cam && nextJunctions[settings.cam]) {
+        nextJunctions[settings.cam] = {
+          ...nextJunctions[settings.cam],
           signals: {
-            ...prev.signals,
-            mode: settings.mode || prev.signals.mode
+            ...nextJunctions[settings.cam].signals,
+            mode: settings.mode || nextJunctions[settings.cam].signals?.mode
           },
           metrics: {
-            ...prev.metrics,
-            traffic_density: settings.density || prev.metrics.traffic_density
-          },
-          junctions: nextJunctions
+            ...nextJunctions[settings.cam].metrics,
+            traffic_density: settings.density || nextJunctions[settings.cam].metrics?.traffic_density
+          }
         };
-      });
+      }
+      return {
+        ...prev,
+        signals: {
+          ...prev.signals,
+          mode: settings.mode || prev.signals.mode
+        },
+        metrics: {
+          ...prev.metrics,
+          traffic_density: settings.density || prev.metrics.traffic_density
+        },
+        junctions: nextJunctions
+      };
+    });
 
-      if (settings.mode && voiceAnnounce) {
-        speakAlert(`Signal Controller ${settings.cam ? `for ${settings.cam} ` : ''}switched to ${settings.mode === 'ADAPTIVE' ? 'Adaptive AI Mode' : 'Fixed Baseline Mode'}`);
-      }
-      if (settings.density && voiceAnnounce) {
-        speakAlert(`Traffic demand ${settings.cam ? `for ${settings.cam} ` : ''}set to ${settings.density.replace('_', ' ')}`);
-      }
-    } catch (err) {
-      console.error('Failed to update settings:', err);
+    if (settings.mode && voiceAnnounce) {
+      speakAlert(`Signal Controller switched to ${settings.mode === 'ADAPTIVE' ? 'Adaptive AI Mode' : 'Fixed Baseline Mode'}`);
+    }
+    if (settings.density && voiceAnnounce) {
+      speakAlert(`Traffic demand set to ${settings.density.replace('_', ' ')}`);
     }
   };
 
@@ -188,10 +354,42 @@ export default function App() {
           reason: `Emergency Ambulance Priority Route on ${cam || 'All Intersections'}`
         })
       });
-      speakAlert(`Priority Alert! Emergency green corridor engaged on ${direction === 'NS' ? 'North South' : 'East West'} route${cam ? ` for ${cam}` : ''}.`);
-    } catch (err) {
-      console.error('Failed to trigger preemption:', err);
+    } catch {
+      // Local client fallback
     }
+
+    // Inject emergency vehicle locally
+    setTelemetry((prev) => {
+      const ambulance = {
+        id: Date.now(),
+        approach: direction === 'NS' ? 'N' : 'E',
+        type: 'ambulance',
+        dist: 140,
+        speed: 68,
+        stopped: false,
+        is_emergency: true
+      };
+      return {
+        ...prev,
+        signals: {
+          ...prev.signals,
+          current_phase: direction === 'NS' ? 'NS_EMERGENCY' : 'EW_EMERGENCY',
+          ns_light: direction === 'NS' ? 'GREEN' : 'RED',
+          ew_light: direction === 'NS' ? 'RED' : 'GREEN',
+          time_remaining_sec: 25.0,
+          green_corridor: {
+            active: true,
+            direction,
+            reason: 'Ambulance Unit Preemption',
+            cleared_count: (prev.signals.green_corridor?.cleared_count || 0) + 1,
+            time_saved_sec: (prev.signals.green_corridor?.time_saved_sec || 0) + 38
+          }
+        },
+        vehicles: [ambulance, ...prev.vehicles]
+      };
+    });
+
+    speakAlert(`Priority Alert! Emergency green corridor engaged on ${direction === 'NS' ? 'North South' : 'East West'} route.`);
   };
 
   // Export Infraction Ledger to CSV
@@ -210,7 +408,7 @@ export default function App() {
       v.speed,
       v.status
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\\n');
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
@@ -224,7 +422,7 @@ export default function App() {
     }
   };
 
-  // Keyboard Navigation & Shortcuts Listener
+  // Keyboard Shortcuts Listener
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
@@ -264,7 +462,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [telemetry.signals?.mode, voiceAnnounce, violations]);
 
-  // WebSocket Telemetry Connection
+  // WebSocket Telemetry Connection (Local or Remote Backend)
   useEffect(() => {
     let reconnectTimeout = null;
 
@@ -272,53 +470,48 @@ export default function App() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${window.location.host}/ws/telemetry`;
 
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+      try {
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
 
-      ws.onopen = () => {
-        setIsConnected(true);
-      };
+        ws.onopen = () => {
+          setIsConnected(true);
+        };
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          setTelemetry((prev) => {
-            if (data.signals?.green_corridor?.active && !lastAnnouncedCorridorRef.current) {
-              lastAnnouncedCorridorRef.current = true;
-              speakAlert(`Emergency green corridor engaged on ${data.signals.green_corridor.direction || 'North South'} route!`);
-            } else if (!data.signals?.green_corridor?.active) {
-              lastAnnouncedCorridorRef.current = false;
-            }
-
-            return {
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            setTelemetry((prev) => ({
               ...prev,
               signals: data.signals || prev.signals,
               metrics: data.metrics || prev.metrics,
               vehicles: data.vehicles || prev.vehicles,
               cameras: data.cameras || prev.cameras,
               junctions: data.junctions || prev.junctions
-            };
-          });
+            }));
 
-          if (data.latest_violation) {
-            setViolations((prev) => {
-              if (prev.some((v) => v.id === data.latest_violation.id)) return prev;
-              return [data.latest_violation, ...prev];
-            });
+            if (data.latest_violation) {
+              setViolations((prev) => {
+                if (prev.some((v) => v.id === data.latest_violation.id)) return prev;
+                return [data.latest_violation, ...prev];
+              });
+            }
+          } catch (e) {
+            console.error('Error parsing telemetry:', e);
           }
-        } catch (e) {
-          console.error('Error parsing telemetry message:', e);
-        }
-      };
+        };
 
-      ws.onclose = () => {
-        setIsConnected(false);
-        reconnectTimeout = setTimeout(connectWebSocket, 2000);
-      };
+        ws.onclose = () => {
+          setIsConnected(false);
+          reconnectTimeout = setTimeout(connectWebSocket, 4000);
+        };
 
-      ws.onerror = () => {
+        ws.onerror = () => {
+          setIsConnected(false);
+        };
+      } catch {
         setIsConnected(false);
-      };
+      }
     };
 
     connectWebSocket();
@@ -327,7 +520,7 @@ export default function App() {
       if (wsRef.current) wsRef.current.close();
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
-  }, [speakAlert]);
+  }, []);
 
   const fontClass = fontSize === 'xl' ? 'text-base' : fontSize === 'large' ? 'text-[15px]' : 'text-sm';
 
@@ -404,10 +597,10 @@ export default function App() {
           <div className="hidden xl:flex items-center gap-3 text-xs font-mono text-slate-400">
             <span className="flex items-center gap-1.5">
               <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-              <span>5Hz Ingestion Loop</span>
+              <span>{isConnected ? 'Backend Link Active' : 'Edge Micro-Simulation'}</span>
             </span>
             <span className="text-slate-600">/</span>
-            <span className="text-cyan-400 font-bold">8 Cameras Active</span>
+            <span className="text-cyan-400 font-bold">8 Cameras Available</span>
           </div>
         </div>
 
@@ -602,7 +795,7 @@ export default function App() {
           <span>• Municipal Traffic Operations & Dynamic Signal Optimization</span>
         </div>
         <div className="flex items-center gap-4 text-[11px] text-slate-400">
-          <span>LATENCY: <strong className="text-cyan-400">18ms</strong></span>
+          <span>MODE: <strong className="text-cyan-400">{isConnected ? 'ONLINE BACKEND' : 'BROWSER EDGE SIM'}</strong></span>
           <span>STATUS: <strong className="text-emerald-400">NOMINAL</strong></span>
           <span>SECURITY: <strong className="text-slate-300">TLS ENCRYPTED</strong></span>
         </div>

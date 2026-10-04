@@ -1,3 +1,4 @@
+import SyntheticVisionFeed from './SyntheticVisionFeed';
 import React, { useState } from 'react';
 import {
   Video,
@@ -231,17 +232,17 @@ export default function CctvStreamView({ onSettingChange, cameras = DEFAULT_CAME
                   onError={() => setFeedError(true)}
                 />
               ) : (
-                <div className="flex flex-col items-center justify-center p-8 text-center text-slate-500">
-                  <Video className="w-12 h-12 mb-3 text-slate-600 animate-pulse" />
-                  <p className="text-sm font-medium text-slate-400 font-mono">
-                    Establishing feed with {selectedCam.id}...
-                  </p>
-                  <button
-                    onClick={() => setFeedError(false)}
-                    className="mt-3 px-3.5 py-1.5 rounded-lg bg-cyan-500/20 text-xs font-mono text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 transition flex items-center gap-1.5"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> Reconnect Feed
-                  </button>
+                <div className="relative w-full h-auto">
+                  <SyntheticVisionFeed
+                    camera={selectedCam}
+                    showBoxes={showBoxes}
+                    showSpeeds={showSpeeds}
+                    showTrails={showTrails}
+                    showLanes={showLanes}
+                  />
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-2.5 py-0.5 rounded-full bg-slate-950/80 border border-cyan-500/40 text-[10px] font-mono text-cyan-300 backdrop-blur-md">
+                    SYNTHETIC TELEMETRY // CONNECT LOCAL BACKEND FOR CCTV HARDWARE
+                  </div>
                 </div>
               )}
             </div>
