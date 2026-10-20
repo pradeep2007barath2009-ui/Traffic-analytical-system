@@ -90,7 +90,33 @@ A production-grade, end-to-end intelligent urban traffic management and analytic
 
 ## 🚀 Quick Start Guide
 
-### 1. Launch Everything in One Click (Windows)
+### ☕ 1. Native Java Traffic Operations Command Center (New!)
+
+Run the complete native Java desktop system with hardware-accelerated 60 FPS visual rendering:
+
+1. **Compile Java System**:
+   ```cmd
+   compile_java.bat
+   ```
+2. **Launch Desktop Operations Center GUI**:
+   ```cmd
+   run_java.bat
+   ```
+   - **Visuals**: Hardware-accelerated 4-way intersection, dynamic vehicle headlights, glowing red brake lights, zebra crosswalks, animated pedestrians, and optical CCTV viewfinder with target bounding boxes.
+   - **Hotkeys**:
+     - `A`: Emergency Ambulance Green Corridor Preemption.
+     - `P`: Pedestrian Crossing Request (vehicles stop before crosswalk).
+     - `S`: Spawn new vehicle.
+     - `Space`: Pause or resume simulation.
+3. **Launch Headless Java REST Server**:
+   ```cmd
+   run_java_server.bat
+   ```
+   Provides live REST API endpoints at `http://localhost:8000/api/status`, `/api/metrics`, `/api/violations`.
+
+---
+
+### 🌐 2. Web Dashboard Launch (Python & React)
 Double-click `run_all.bat` or run:
 ```cmd
 run_all.bat

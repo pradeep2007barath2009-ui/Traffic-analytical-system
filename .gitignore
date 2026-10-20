@@ -48,3 +48,8 @@ Thumbs.db
 
 # Temporary directories
 scratch/
+
+# Java build output
+*.class
+java_system/bin/
+java_system/sources.txt
